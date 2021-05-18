@@ -128,131 +128,10 @@ class EarlyStoppingByLossVal(Callback):
       if self.verbose > 0:
         print("Epoch %05d: early stopping THR" % epoch)
       self.model.stop_training = True
-
-      
-
-      
-def calc_lr(optimizer):
-    decay = optimizer.decay
-    lr = optimizer.lr
-    iters = optimizer.iterations # only this should not be const
-    beta_1 = optimizer.beta_1
-    beta_2 = optimizer.beta_2
-    # calculate
-    lr = lr * (1. / (1. + decay * K.cast(iters, K.dtype(decay))))
-    t = K.cast(iters, K.floatx()) + 1
-    lr_t = lr * (K.sqrt(1. - K.pow(beta_2, t)) / (1. - K.pow(beta_1, t)))
-    ret_lr = np.float32(K.eval(lr_t))
-    return ret_lr
       
 filepath="weights-improvement-{epoch:02d}-{val_accuracy:.2f}.hdf5"
 checkpointSmallestMSE = EarlyStoppingByLossVal(monitor='loss',mode='min', value=0.0001, verbose=1)#value=0.0001
 callbacks_list = [checkpointSmallestMSE]   
-
-def print_weights_to_csv(dfWeights,model,dfForecastDay,iHour,initWeights):
-  
-  dictWeights={'Year':[],'Month':[],'Day':[],'Hour':[],'Layer':[],'Min':[],'Max':[],'AbsMin':[],'AbsMax':[],'AVG':[],'STD':[],'InitWeights':[],'IsBias':[]}
-
-  for layer in model.layers:
-    lenWeights=len(layer.get_weights())
-    if lenWeights == 0:
-      continue
-    
-    for weightArray in layer.get_weights():
-      if weightArray.ndim == 3:
-        for singleWeightArray in weightArray:
-          #strMinMax=' Min: '+str(singleWeightArray.min())+' abs(Min): '+str(np.fabs(singleWeightArray).min())+' Max: '+str(singleWeightArray.max())+'\n'
-          #strMinMax=formatStr%(singleWeightArray.min(),singleWeightArray.max(),np.fabs(singleWeightArray).min(),np.fabs(singleWeightArray).max(),singleWeightArray.mean(),singleWeightArray.std())+'\n'
-          dictWeights['Year'].append(int(dfForecastDay.iloc[0].Year))
-          dictWeights['Month'].append(int(dfForecastDay.iloc[0].Month))
-          dictWeights['Day'].append(int(dfForecastDay.iloc[0].Day))
-          dictWeights['Hour'].append(iHour)
-          dictWeights['Layer'].append(layer.name)
-          dictWeights['Min'].append(singleWeightArray.min())
-          dictWeights['Max'].append(singleWeightArray.max())
-          dictWeights['AbsMin'].append(np.fabs(singleWeightArray).min())
-          dictWeights['AbsMax'].append(np.fabs(singleWeightArray).max())
-          dictWeights['AVG'].append(singleWeightArray.mean())
-          dictWeights['STD'].append(singleWeightArray.std())
-          dictWeights['InitWeights'].append(initWeights)
-          dictWeights['IsBias'].append(0)
-          #f.write((layer.name+strMinMax).encode())
-          #np.savetxt(f, singleWeightArray, delimiter=',')  
-      elif weightArray.ndim == 2:
-        #strMinMax=' Min: '+str(weightArray.min())+' abs(Min): '+str(np.fabs(weightArray).min())+' Max: '+str(weightArray.max())+'\n'
-        #strMinMax=formatStr%(weightArray.min(),weightArray.max(),np.fabs(weightArray).min(),np.fabs(weightArray).max(),weightArray.mean(),weightArray.std())+'\n'
-        #f.write((layer.name+strMinMax).encode())
-        #np.savetxt(f, weightArray, delimiter=',')
-        dictWeights['Year'].append(int(dfForecastDay.iloc[0].Year))
-        dictWeights['Month'].append(int(dfForecastDay.iloc[0].Month))
-        dictWeights['Day'].append(int(dfForecastDay.iloc[0].Day))
-        dictWeights['Hour'].append(iHour)
-        dictWeights['Layer'].append(layer.name)
-        dictWeights['Min'].append(weightArray.min())
-        dictWeights['Max'].append(weightArray.max())
-        dictWeights['AbsMin'].append(np.fabs(weightArray).min())
-        dictWeights['AbsMax'].append(np.fabs(weightArray).max())
-        dictWeights['AVG'].append(weightArray.mean())
-        dictWeights['STD'].append(weightArray.std())
-        dictWeights['InitWeights'].append(initWeights)
-        dictWeights['IsBias'].append(0)        
-      else:#bias vector
-        #strMinMax=' BIAS Min: '+str(weightArray.min())+' abs(Min): '+str(np.fabs(weightArray).min())+' Max: '+str(weightArray.max())+'\n'
-        #f.write((layer.name+strMinMax).encode())
-        #np.savetxt(f, weightArray, delimiter=',')
-        dictWeights['Year'].append(int(dfForecastDay.iloc[0].Year))
-        dictWeights['Month'].append(int(dfForecastDay.iloc[0].Month))
-        dictWeights['Day'].append(int(dfForecastDay.iloc[0].Day))
-        dictWeights['Hour'].append(iHour)
-        dictWeights['Layer'].append(layer.name+"_Bias")
-        dictWeights['Min'].append(weightArray.min())
-        dictWeights['Max'].append(weightArray.max())
-        dictWeights['AbsMin'].append(np.fabs(weightArray).min())
-        dictWeights['AbsMax'].append(np.fabs(weightArray).max())
-        dictWeights['AVG'].append(weightArray.mean())
-        dictWeights['STD'].append(weightArray.std())#
-        dictWeights['InitWeights'].append(initWeights)
-        dictWeights['IsBias'].append(1)
-  dfRes = pd.DataFrame(columns=dictWeights.keys())
-  for key in dictWeights:
-    dfRes[key]=dictWeights[key]
-  return pd.concat([dfWeights,dfRes],ignore_index=True)  
-  
-  
-def print_weights(pathWeightsTarget,model,dfForecastDay,iHour):
-  
-  filename=pathWeightsTarget+'Weights_'+str(int(dfForecastDay.iloc[0].Year))+'_'+str(int(dfForecastDay.iloc[0].Month))+'_'+str(int(dfForecastDay.iloc[0].Day))+'.txt'
-  param='ab'
-  if iHour==0:
-    param='wb'
-  f=open(filename,param)
-  f.write(('WEIGHTS FOR HOUR '+str(iHour)+'\n').encode())
-  
-  formatStr="Min: %f, Max: %f, Abs Min: %f, Abs Max: %f, Mean: %f, Std: %f"
-  for layer in model.layers:
-    lenWeights=len(layer.get_weights())
-    if lenWeights == 0:
-      continue
-    
-    for weightArray in layer.get_weights():
-      f.write((layer.name+ ", DIM: " + str(weightArray.ndim)+" SHAPE: "+str(weightArray.shape)+"\n").encode())
-      if weightArray.ndim == 3:
-        for singleWeightArray in weightArray:
-          #strMinMax=' Min: '+str(singleWeightArray.min())+' abs(Min): '+str(np.fabs(singleWeightArray).min())+' Max: '+str(singleWeightArray.max())+'\n'
-          strMinMax=formatStr%(singleWeightArray.min(),singleWeightArray.max(),np.fabs(singleWeightArray).min(),np.fabs(singleWeightArray).max(),singleWeightArray.mean(),singleWeightArray.std())+'\n'
-          f.write((layer.name+strMinMax).encode())
-          #np.savetxt(f, singleWeightArray, delimiter=',')  
-      elif weightArray.ndim == 2:
-        #strMinMax=' Min: '+str(weightArray.min())+' abs(Min): '+str(np.fabs(weightArray).min())+' Max: '+str(weightArray.max())+'\n'
-        strMinMax=formatStr%(weightArray.min(),weightArray.max(),np.fabs(weightArray).min(),np.fabs(weightArray).max(),weightArray.mean(),weightArray.std())+'\n'
-        f.write((layer.name+strMinMax).encode())
-        #np.savetxt(f, weightArray, delimiter=',')   
-      else:#bias vector
-        strMinMax=' BIAS Min: '+str(weightArray.min())+' abs(Min): '+str(np.fabs(weightArray).min())+' Max: '+str(weightArray.max())+'\n'
-        f.write((layer.name+strMinMax).encode())
-        #np.savetxt(f, weightArray, delimiter=',')   
-  f.close()
-
 
 class EncoderDecoderRNN:
   def __init__(self, lFeaturesEncoder,lFeaturesDecoder,lTargetNodes,\
@@ -757,29 +636,6 @@ def get_weights_name(dfDay):
         else:
             return 'irr_reg_workday_weights.h5'
      
-
-def scheduler(epoch, lr):
-    return lr
-
-
-def calc_solution_space(path_results):
-    df_ed_ann = pd.read_csv(path_results)
-    l_day = []
-    l_pred_av_lp = []
-    l_actual_av_lp = []
-    for idx_row in range(0,df_ed_ann.shape[0], 24):
-        df_sub = df_ed_ann.iloc[idx_row:idx_row+24]
-        l_day.append(str(int(df_sub.iloc[0].Year))+'/'+str(int(df_sub.iloc[0].Month))+'/'+str(int(df_sub.iloc[0].Day)))
-        l_pred_av_lp.append(df_sub['Predicted'].mean())
-        l_actual_av_lp.append(df_sub['Real'].mean())
-
-    df_res = pd.DataFrame()
-    df_res['Day'] = l_day
-    df_res['PredictedAvPower'] = l_pred_av_lp
-    df_res['ActualAvPower'] = l_actual_av_lp
-
-    df_res.to_csv('SolutionSpace.csv')
-      
 def makePredictionWithANN(pathTrainingData, pathEvaluationData,pathResults):
   print(dictParams)
 
