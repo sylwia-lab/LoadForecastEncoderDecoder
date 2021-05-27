@@ -490,10 +490,6 @@ def create_training_model_with_attention(annModel, reg, file_name, num_prev_days
                                                               initial_state=initial_states)
       #execute attention
       if dictParams['UseAttention'] == 1:
-          #num_timestamps_filtered = dictParams['HoursEncoder']
-          #flat_encoder = Reshape((num_timesteps_before*num_lstm_units,))(encoder_outputs)
-          #flat_decoder = Reshape((num_lstm_units,))(decoder_outputs)
-          #concat_concat_encoder_decoder = Concatenate(axis=1)([flat_encoder,flat_decoder])
           attention_layer_name = 'attention_layer_' + str(time_instance)
           attention_layer = GlobalAttention(num_lstm_units,num_timesteps_before,\
                                             initializer,layer_name=attention_layer_name)
@@ -501,7 +497,6 @@ def create_training_model_with_attention(annModel, reg, file_name, num_prev_days
           dense_name = "decoder_output_" + str(time_instance)
           decoder_dense = Dense(1, name = dense_name)
           decoder_output = decoder_dense(attended_decoder)
-          #decoder_state_c = Multiply()([attended_decoder, decoder_state_c])
           #connect attention result with the next layer
           initial_states = [attended_decoder, decoder_state_c]
       else:
@@ -537,8 +532,6 @@ def create_training_model_with_attention(annModel, reg, file_name, num_prev_days
   ann_model.compile(loss='mean_squared_error', metrics=['mean_squared_error'],\
                     optimizer=adam)#metrics=['mean_squared_error']    
   print("Model compiled successfully!")
-  #print("ann_model.input", ann_model.input)
-  #print("ann_model.output", ann_model.output)
   return ann_model
 
 def create_inference_encoder_model(training_model):
@@ -557,7 +550,6 @@ def create_inference_encoder_model(training_model):
 
 def create_inference_decoder_model(training_model, idxHour, num_prev_days=dictParams['NumPrevDays']):
   num_lstm_units = dictParams['NumLSTMCells']
-  #decoder_inputs = Input(shape=(1,num_features))
   
   decoder_input_name = 'decoder_input_' + str(idxHour)
   decoder_inputs = training_model.get_layer(decoder_input_name).input
@@ -596,13 +588,9 @@ def create_inference_decoder_model(training_model, idxHour, num_prev_days=dictPa
   
   if dictParams['UseAttention'] == 1:
       attention_layer_name = 'attention_layer_' + str(idxHour)
-      attention_layer = training_model.get_layer(attention_layer_name)
-      #flat_encoder = Reshape((num_timesteps_before*num_lstm_units,))(decoder_encoder_input)
-      #flat_decoder = Reshape((num_lstm_units,))(decoder_lstm_outputs)
-      #concat_concat_encoder_decoder = Concatenate(axis=1)([flat_encoder,flat_decoder])  
+      attention_layer = training_model.get_layer(attention_layer_name) 
       attended_decoder = attention_layer(decoder_encoder_input, decoder_lstm_outputs, training=False)  
       decoder_outputs = decoder_dense(attended_decoder)
-      #state_c = Multiply()([attended_decoder, state_c])
       decoder_states_outputs = [attended_decoder, state_c]
   else:
       decoder_outputs = decoder_dense(decoder_lstm_outputs)
@@ -617,25 +605,7 @@ def create_inference_decoder_model(training_model, idxHour, num_prev_days=dictPa
   return decoder_model
 
        
-  
-                                         
-     
-def idxToTargetHour(idx,hour,num_hours_back):
-  target_hour = hour - (num_hours_back-idx)
-  return target_hour
-
-def get_weights_name(dfDay):
-    if dfDay.iloc[0].IsHoliday == 1:
-        if dfDay.iloc[0].IsRegularDay == 1:
-            return 'reg_holiday_weights.h5'
-        else:
-            return 'irr_reg_holiday_weights.h5'
-    else:
-        if dfDay.iloc[0].IsRegularDay == 1:
-            return 'reg_workday_weights.h5'
-        else:
-            return 'irr_reg_workday_weights.h5'
-     
+                                           
 def makePredictionWithANN(pathTrainingData, pathEvaluationData,pathResults):
   print(dictParams)
 
@@ -680,8 +650,7 @@ def makePredictionWithANN(pathTrainingData, pathEvaluationData,pathResults):
   ##################################################################################
   ##################################################################################
 
-  
-  num_collected_days = 0
+
 
   #Loop over days
   for idxProcessedEntry in range(0,numEntriesPredInput,24):
@@ -689,7 +658,7 @@ def makePredictionWithANN(pathTrainingData, pathEvaluationData,pathResults):
     startTsSec = dfPredictionInput.iloc[idxProcessedEntry].Timestamp
     endTsSec = startTsSec + 3600*24
 
-    print('Initial num_collected_days', num_collected_days)
+
 
     dfForecastDay = dfPredictionInput[(dfPredictionInput.Timestamp>=startTsSec) & \
                                       (dfPredictionInput.Timestamp<endTsSec)].copy()
@@ -781,7 +750,7 @@ def makePredictionWithANN(pathTrainingData, pathEvaluationData,pathResults):
     #predict input for the decoder with encoder input 
     encoder_outputs = encoder_model.predict_on_batch(InputNodesEval[0])
     states_value = [encoder_outputs[1], encoder_outputs[2]]
-    num_collected_days = num_collected_days - 1
+
 
     for idxHour in range(0, dictParams['NumHoursAhead']):
         timeStartSinglePrediction = time.time()

@@ -64,25 +64,6 @@ def is_regular_day(av_temp):
   #else:#cold
   #  return 0
 
-def calcDiff(dfAnyDay,dfForecastDay,lAttributes):
-  if len(dfAnyDay.Timestamp)!=24 or len(dfForecastDay.Timestamp)!=24:
-    return 1000
-  diffAttributes=0
-  for attribute in lAttributes:
-    for idxHour in range(0,24):
-      delta = dfAnyDay[attribute].iloc[idxHour]-dfForecastDay[attribute].iloc[idxHour]
-      diffAttributes+=(delta*delta)
-  return math.sqrt(diffAttributes)
-
-
-
-def get_weight_for_temp(d_temp):
-  d_weight = 1
-  b = 0.82
-  a = 0.171
-
-  d_weight = a*d_temp + b
-  return d_weight
 
 def calc_weight_factor(attribute,dfAllDataNormalized):
   wf = 1
@@ -92,44 +73,7 @@ def calc_weight_factor(attribute,dfAllDataNormalized):
   #print("WF", attribute,wf)
   return wf
 
-def filter_closest_day(timestamp, is_holiday, is_holiday_prev):
-    prev_timestamp = 0
-    if is_holiday == is_holiday_prev:
-        prev_timestamp = int(timestamp - 1*24*60*60)
-    elif is_holiday == 1:
-        prev_timestamp = int(timestamp - 7*24*60*60)
-    else:
-        prev_timestamp = int(timestamp - 3*24*60*60)
-    return prev_timestamp
 
-def calc_similarity(lAttributes,dfCurrent,dfPrevious):
-  
-  #lAttributes.append('IsHoliday')
-  
-  dfForecastDayRow0 = dfCurrent.iloc[0,:].copy()
-  dfPrevDayRow0 = dfPrevious.iloc[0,:].copy()
-  similarity = 0
-  expFact=2.0
-  weight = 1
-  for attribute in lAttributes:
-    av_attribute = (dfForecastDayRow0[attribute])
-    weight=calc_weight_factor(attribute,dfPrevious)
-
-    similarity += (weight*abs(dfPrevDayRow0[attribute]-av_attribute))**expFact
-    
-  return similarity
-
-
-def filter_on_missing_previous_days(dfFilteredTrainingData, prev_days):
-  
-  dfFilteredTrainingData['DiffPrevDays'] = [0]*dfFilteredTrainingData.shape[0]
-  
-  for idx_day in range(prev_days,0,-1):
-      print("idx_day", idx_day)
-      delta = idx_day*24
-      dfFilteredTrainingData['DiffPrevDays'] =  dfFilteredTrainingData['Timestamp'].diff(periods=delta)
-  print(dfFilteredTrainingData['DiffPrevDays'])  
-  return dfFilteredTrainingData
 
 def get_previous_days(dfAllDataNormalized, dfFilteredTrainingData, prev_days):
   
@@ -172,104 +116,6 @@ def get_previous_days(dfAllDataNormalized, dfFilteredTrainingData, prev_days):
   return dfAllDataNormalized, df_PrevDays
 
 
-def avg_values(val, num_prev_days):
-    if num_prev_days > 0:
-        return val / num_prev_days
-    else:
-        return val
-
-def process_val(is_in, cnt_prev_days, old_val, new_val):
-    #print(is_in, cnt_prev_days, old_val, new_val)
-    if is_in is False:
-        return old_val
-    if cnt_prev_days == 0:
-        return new_val
-    return (old_val + new_val)
-
-def process_cnt_days(is_in, old_cnt):
-    if is_in is False:
-        return old_cnt
-    return (old_cnt + 1)
-
-    
-def get_previous_days_avg(dfAllDataNormalized, dfFilteredTrainingData, prev_avg_days):
-  #'Hour',
-  lAttributesEncoder=['Temperature_Cont','WetBulb_Cont' ,'IsHoliday','DayOfWeek', 'Daylength', 'IsRegularDay',\
-                      'DeltaTemp_Cont', 'PrevLoadPower_Cont']
-
-  dfAllDataNormalized = dfAllDataNormalized.sort_values('Timestamp',ascending=True)
-  dfFilteredTrainingData = dfFilteredTrainingData.sort_values('Timestamp',ascending=True)
-      
-  same_tables = False
-  #throw away first 24 entries
-  if dfAllDataNormalized.shape[0] == dfFilteredTrainingData.shape[0]:
-      dfFilteredTrainingData = dfFilteredTrainingData.iloc[24:].copy()
-      same_tables = True
-
-  df_out = dfFilteredTrainingData.copy()
-  df_out['CountPrevDays'] = [0]*df_out.shape[0]
-  df_out['Timestamp'] = df_out['Timestamp']-24*60*60
-  df_out['TimestampIsIn'] = [False]*df_out.shape[0]
-
- 
-
-  fake_row = dfAllDataNormalized.iloc[0]
-
-  df_timestamps = pd.DataFrame()
-  for idx_day in range(prev_avg_days,0,-1):
-      print("idx_day", idx_day)
-      delta_ts = idx_day*24*60*60
-      
-      df_timestamps['Timestamp'] = dfFilteredTrainingData['Timestamp']-delta_ts    
-      l_timestamps = df_timestamps['Timestamp'].values
-      print("get_previous_days: l_timestamps", len(l_timestamps))
-      
-      df_out['TimestampIsIn'] = df_timestamps['Timestamp'].isin(dfAllDataNormalized['Timestamp'])
-      df_PrevDays_merged = pd.DataFrame()
-      init = False
-      for ts in l_timestamps:
-          df_row = dfAllDataNormalized[dfAllDataNormalized['Timestamp'] == ts].copy()
-          if df_row.shape[0] == 0:
-              df_row = fake_row.copy()
-              
-          if init is False:
-              df_PrevDays_merged = df_row.copy()
-              init = True
-          else:
-              df_PrevDays_merged = pd.concat([df_PrevDays_merged,df_row], ignore_index=True, axis=0)
-      
-      #update attributes
-      for entry in lAttributesEncoder:
-          #print("dupa", entry, df_out.shape[0], df_PrevDays_merged.shape[0])
-          df_out['Tmp'] = df_PrevDays_merged[entry].values
-          df_out[entry] = \
-              df_out.apply(lambda x: process_val(x.TimestampIsIn, x.CountPrevDays, x[entry], x.Tmp), axis=1)
-      
-      #update count days
-      df_out['CountPrevDays'] = \
-              df_out.apply(lambda x: process_cnt_days(x.TimestampIsIn, x.CountPrevDays), axis=1)
-      
-  
-  for entry in lAttributesEncoder:
-      df_out[entry] = \
-              df_out.apply(lambda x: avg_values(x[entry], x.CountPrevDays), axis=1)  
-  
-  df_out = df_out[df_out.CountPrevDays > 0]
-  df_out = df_out.drop(['CountPrevDays','TimestampIsIn', 'Tmp'], axis = 1) #
-  df_out['FilterDelta'] = [0]*df_out.shape[0]
-
-  #throw away first 24 entries
-  if same_tables is True:
-      dfAllDataNormalized = dfAllDataNormalized.iloc[24:].copy()
-      
-
-  print("df_out", df_out.shape, df_out['Year'].max(), df_out['Year'].min())
-  print("dfAllDataNormalized", dfAllDataNormalized.shape, \
-        dfAllDataNormalized['Year'].max(), dfAllDataNormalized['Year'].min())
-  
-  return dfAllDataNormalized, df_out
-
-
 def insert_idx_day(dfFilteredTrainingData, df_PrevDays, prev_days):
   vec_idx_day_filtered = np.arange(int(dfFilteredTrainingData.shape[0]/24))
   print("dfFilteredTrainingData",dfFilteredTrainingData.shape)
@@ -284,10 +130,6 @@ def insert_idx_day(dfFilteredTrainingData, df_PrevDays, prev_days):
   dfFilteredTrainingData['IdxDay']=vec_idx_day_filtered
   return dfFilteredTrainingData, df_PrevDays
         
-
-
-def calc_filter_delta(att_hist_data, att_forecast_day,weight, expFact):
-    return (weight*abs(att_hist_data-att_forecast_day))**expFact
 
 
 def filterDataByDayLengthTempRef(lAttributes, dfForecastDay, dfAllDataNormalized, dfAllDataNormalized_Prev, \
@@ -382,31 +224,6 @@ def filterDataByDayLengthTempRef(lAttributes, dfForecastDay, dfAllDataNormalized
   
   
   return dfFilteredTrainingData, df_PrevDays
-
-
-
-
-def get_hourly_sample_weights(lAttributes,dfForecastDay,dfFilteredTrainingData):
-  print("dfFilteredTrainingData", dfFilteredTrainingData.shape[0]/24)
-  res_array = np.zeros((int(dfFilteredTrainingData.shape[0]/24), 24))
-  loc_lAttributes = ['Temperature_Cont','WetBulb_Cont']
-  loc_lAttributes.extend(lAttributes)
-
-
-  expFact=2.0
-  weight = 1
-  for idxHour in range(24):
-      sub_df = dfFilteredTrainingData[dfFilteredTrainingData.CurHour == idxHour].copy()
-      for attribute in loc_lAttributes:
-          av_attribute = dfForecastDay.iloc[idxHour].loc[attribute]
-          weight=calc_weight_factor(attribute,dfFilteredTrainingData)#sub_df)
-          res_array[:,idxHour] += (weight*abs(sub_df[attribute]-av_attribute))**expFact
-    
-  res_array = (res_array/len(lAttributes))**(1.0/expFact)
-  
-  return res_array
-  
-
 
 
 
